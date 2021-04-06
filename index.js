@@ -17,6 +17,38 @@ const atmosphereTypeToLayer = {
   'SO2': 'composition_europe_so2_forecast_surface'
 };
 
+// NUT: https://www.naturvardsverket.se/Stod-i-miljoarbetet/Vagledningar/Luft-och-klimat/Miljokvalitetsnormer-for-utomhusluft/Gransvarden-malvarden-utvarderingstrosklar/
+const moderateLimit = {
+  'Pollen-Birch': null,
+  'CO': 5000,
+  'Pollen-Grass': null,
+  'NH3': null,
+  'NMVOC': null,
+  'NO': null,
+  'NO2': 54,
+  'O3': null,
+  'PANs': null,
+  'PM10': 25,
+  'PM2.5': 10,
+  'SO2': 100
+};
+
+// ÖUT: https://www.naturvardsverket.se/Stod-i-miljoarbetet/Vagledningar/Luft-och-klimat/Miljokvalitetsnormer-for-utomhusluft/Gransvarden-malvarden-utvarderingstrosklar/
+const badLimit = {
+  'Pollen-Birch': null,
+  'CO': 7000,
+  'Pollen-Grass': null,
+  'NH3': null,
+  'NMVOC': null,
+  'NO': null,
+  'NO2': 72,
+  'O3': null,
+  'PANs': null,
+  'PM10': 35,
+  'PM2.5': 25,
+  'SO2': 150
+};
+
 function offset([long, lat], dn = 10, de = 10) {
   // Earth’s radius, sphere.
   const R = 6378137
@@ -135,6 +167,42 @@ async function handle (event) {
       }
     }
   }, {});
+
+  const average = arr => arr.reduce( ( p, c ) => p + c, 0 ) / arr.length;
+
+  const aqi = average([
+    responseData['NO2'].value,
+    responseData['PM10'].value,
+    responseData['O3'].value,
+    responseData['PM2.5'].value
+  ]);
+
+  let qualitativeName;
+
+  if (aqi >= 100) {
+    qualitativeName = 'very_high';
+  }
+
+  if (aqi < 100) {
+    qualitativeName = 'high';
+  }
+
+  if (aqi < 75) {
+    qualitativeName = 'medium';
+  }
+
+  if (aqi < 50) {
+    qualitativeName = 'low';
+  }
+
+  if (aqi < 25) {
+    qualitativeName = 'very_low';
+  }
+
+  responseData.aqi = {
+    qualitativeName,
+    value: aqi
+  };
 
   const prettyPrint = event.request.headers.get('origin') === null;
 
