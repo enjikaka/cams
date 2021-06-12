@@ -3,9 +3,9 @@
  */
 
 const atmosphereTypeToLayer = {
-  'Pollen-Birch': 'composition_europe_pol_birch_forecast_surface',
+  // 'Pollen-Birch': 'composition_europe_pol_birch_forecast_surface',
   'CO': 'composition_europe_co_forecast_surface',
-  'Pollen-Grass': 'composition_europe_pol_grass_forecast_surface',
+  // 'Pollen-Grass': 'composition_europe_pol_grass_forecast_surface',
   'NH3': 'composition_europe_nh3_forecast_surface',
   'NMVOC': 'composition_europe_nmvoc_forecast_surface',
   'NO': 'composition_europe_no_forecast_surface',
@@ -66,9 +66,10 @@ function offset([long, lat], dn = 10, de = 10) {
 
 /**
  * @param {number[]} coord
+ * @param {number} dateMs
  * @param {AthmosphereType} type
  */
-async function get([long, lat], type) {
+async function get([long, lat], dateMs, type) {
   const radius = 5000;
   const [longNW, latNW] = offset([long, lat], -(radius), -(radius));
   const [longSE, latSE] = offset([long, lat], radius, radius);
@@ -101,13 +102,14 @@ async function get([long, lat], type) {
   url.searchParams.set('y', y);
 
   // Adding time currently errors out a python script on the CAMS WMS server...
-  /*
-  const dimRefTime = new Date().toJSON().split('T')[0] + 'T00:00:00Z';
-  const time = new Date().toJSON().split(':')[0] + ':00:00Z';
+
+  const date = new Date(dateMs);
+  const dimRefTime = date.toJSON().split('T')[0] + 'T00:00:00Z';
+  const time = date.toJSON().split(':')[0] + ':00:00Z';
 
   url.searchParams.set('DIM_REFERENCE_TIME', dimRefTime);
   url.searchParams.set('TIME', time);
-  */
+
 
   const response = await fetch(url.toString());
 
@@ -132,17 +134,15 @@ async function get([long, lat], type) {
   }
 }
 
-function getAll(coords) {
+function getAll(coords, dateMs) {
   /** @type {AthmosphereType[]} */
   const keys = Object.keys(atmosphereTypeToLayer);
-  const promises = keys.map(type => get(coords, type));
+  const promises = keys.map(type => get(coords, dateMs, type));
 
   return Promise.all(promises);
 }
 
-async function handle (event) {
-  const url = new URL(event.request.url);
-
+function validateSearchQuery (url) {
   const lat = parseFloat(url.searchParams.get('lat'));
 
   if (Number.isNaN(lat)) {
@@ -155,7 +155,20 @@ async function handle (event) {
     throw new ReferenceError('You did not provide a longitude value in the "lat" search parameter.');
   }
 
-  const atmosphereData = await getAll([lng, lat]);
+  const dateMs = parseFloat(url.searchParams.get('dateMs'));
+
+  if (Number.isNaN(dateMs)) {
+    throw new ReferenceError('You did not provide a value for the "dateMs" search parameter.');
+  }
+
+  return { lng, lat, dateMs };
+}
+
+async function handle (event) {
+  const url = new URL(event.request.url);
+  const { lng, lat, dateMs } = validateSearchQuery(url);
+
+  const atmosphereData = await getAll([lng, lat], dateMs);
   const responseData = atmosphereData.reduce((acc, curr) => {
     const { type, unit, value } = curr;
 
